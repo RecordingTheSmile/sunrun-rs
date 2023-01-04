@@ -18,7 +18,7 @@ jobs:
        uses: canastro/copy-file-action@master
        with:
         source: ${{ steps.compile.outputs.release-dir }}sunrun-rs
-        target: $GITHUB_WORKSPACE/sunrun-rs
+        target: sunrun-rs
      - name: Rename .env File
        uses: canastro/copy-file-action@master
        with:
