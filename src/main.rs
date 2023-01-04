@@ -20,7 +20,7 @@ async fn main() {
         dotenv::from_filename(".env.development").expect("Cannot read .env.development");
     }
     // 初始化日志
-    fast_log::init(fast_log::Config::default().console().level(log::LevelFilter::Warn)).unwrap();
+    fast_log::init(fast_log::Config::default().level(log::LevelFilter::Warn)).unwrap();
 
     // 初始化数据库
     Database::init(std::env::var("DATABASE_URL").unwrap()).await.unwrap();
