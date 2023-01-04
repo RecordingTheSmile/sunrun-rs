@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>阳光体育任务管理</title>
+  <link rel="stylesheet" href="/component/pear/css/pear.css"/>
+  <script src="https://lf9-cdn-tos.bytecdntp.com/cdn/expire-1-M/jquery/3.6.0/jquery.min.js" type="application/javascript"></script>
+</head>
+<body class="pear-container">
+<div class="layui-card">
+  <div class="layui-card-body">
+    <table id="user-table" lay-filter="user-table"></table>
+  </div>
+</div>
+
+<script type="text/html" id="user-toolbar">
+  <button class="pear-btn pear-btn-primary pear-btn-md" lay-event="add">
+    <i class="layui-icon layui-icon-add-1"></i>
+    新增
+  </button>
+</script>
+
+<script type="text/html" id="user-bar">
+  <button class="pear-btn pear-btn-primary pear-btn-sm" lay-event="edit">
+    <i class="layui-icon layui-icon-edit"></i>
+  </button>
+  <button class="pear-btn pear-btn-primary pear-btn-sm" lay-event="executeNow">
+    <i class="layui-icon layui-icon-upload-circle"></i>
+  </button>
+  <button class="pear-btn pear-btn-primary pear-btn-sm" lay-event="runTimes">
+    <i class="layui-icon layui-icon-time"></i>
+  </button>
+  <button class="pear-btn pear-btn-danger pear-btn-sm" lay-event="remove">
+    <i class="layui-icon layui-icon-delete"></i>
+  </button>
+</script>
+
+<script type="text/html" id="run-enable">
+  <input type="checkbox" name="enable" value="{{'{{'}}d.id{{'}}'}}" lay-skin="switch" lay-text="启用|停止" lay-filter="run-enable"
+         {{'{{'}} d.isEnable === true ? 'checked' : '' {{'}}'}}/>
+</script>
+
+<script type="text/html" id="run-time">
+  {{ '{{' }}formatTime(d.hour){{ '}}' }}:{{'{{'}}formatTime(d.minute){{'}}'}}
+</script>
+
+<script type="text/html" id="run-speed">
+  {{'{{'}}d.minSpeed.toFixed(2){{'}}'}} - {{'{{'}}d.maxSpeed.toFixed(2){{'}}'}}
+</script>
+
+<script src="/component/layui/layui.js"></script>
+<script src="/component/pear/pear.js"></script>
+<script>
+
+  function formatTime(t) {
+    let time = t + ''
+    return t.length === 1?'0'+time : time
+  }
+          layui.use(['table', 'form', 'jquery', 'common'], function () {
+            let table = layui.table;
+            let form = layui.form;
+            let common = layui.common;
+
+            let cols = [
+              [{
+                type: 'checkbox'
+              },
+                {
+                  title: '任务ID',
+                  field: 'id',
+                  align: 'center'
+                },
+                {
+                  title: '用户名',
+                  field: 'nickName',
+                  align: 'center'
+                },
+                {
+                  title: '学校名',
+                  field: 'schoolName',
+                  align: 'center'
+                },
+                {
+                  title: '跑步时间',
+                  field: 'runTime',
+                  align: 'center',
+                  templet: '#run-time'
+                },
+                {
+                  title: '速度区间(m/s)',
+                  field: 'speedRange',
+                  align: 'center',
+                  templet: '#run-speed'
+                },
+                {
+                  title: '跑步长度',
+                  field: 'length',
+                  align: 'center',
+                },
+                {
+                  title: '是否启用',
+                  field: 'isEnable',
+                  align: 'center',
+                  templet: '#run-enable'
+                },
+                {
+                  title: '操作',
+                  toolbar: '#user-bar',
+                  align: 'center',
+                  width: 200
+                }
+              ]
+            ]
+
+            table.render({
+              elem: '#user-table',
+              url: '/task/api/task',
+              page: true,
+              cols: cols,
+              skin: 'line',
+              request: {
+                pageName: 'page',
+                limitName:'limit'
+              },
+              parseData: (res) => {
+                return {
+                  'code': res.code === 200 ? 0 : res.status,
+                  'msg': res.message,
+                  'count': res.data.total,
+                  'data':res.data.rows
+                }
+              },
+              toolbar: '#user-toolbar',
+              defaultToolbar: [{
+                title: '刷新',
+                layEvent: 'refresh',
+                icon: 'layui-icon-refresh',
+              }, 'filter', 'print', 'exports']
+            });
+
+            table.on('tool(user-table)', function(obj) {
+              if (obj.event === 'remove') {
+                window.remove(obj);
+              } else if (obj.event === 'edit') {
+                window.edit(obj);
+              } else if (obj.event === 'executeNow') {
+                window.executeNow(obj)
+              } else if (obj.event === 'runTimes') {
+                window.runTimes(obj)
+              }
+            });
+
+            table.on('toolbar(user-table)', function(obj) {
+              if (obj.event === 'add') {
+                window.add();
+              } else if (obj.event === 'refresh') {
+                window.refresh();
+              }
+            });
+
+            form.on('switch(run-enable)', function(obj) {
+              window.changeEnable(this.value,obj.elem.checked)
+            });
+
+            window.add = function() {
+              layer.open({
+                type: 2,
+                title: '新增',
+                shade: 0.1,
+                area: ['100%','100%'],
+                content: '/console/iframes/addSunrunTask'
+              });
+            }
+
+            window.edit = function(obj) {
+              layer.open({
+                type: 2,
+                title: '修改',
+                shade: 0.1,
+                area: ['100%','100%'],
+                content:  `/console/iframes/editSunrunTask/${obj.data["id"]}`
+              });
+            }
+
+            window.runTimes = (obj) => {
+              layer.open({
+                type: 2,
+                title: '查询跑步次数',
+                shade: 0.1,
+                area: [common.isModile() ? '100%' : '500px', common.isModile() ? '100%' : '400px'],
+                content: `/console/iframes/taskStatus?id=${encodeURIComponent(obj.data["id"])}`
+              });
+            }
+
+            window.executeNow = (obj)=>{
+              layer.confirm('确定要立即执行', {
+                icon: 3,
+                title: '提示'
+              }, function(index) {
+                layer.close(index);
+                let loading = layer.load();
+                $.ajax({
+                  url: "/task/api/task/" + obj.data['id']+'/executeNow',
+                  dataType: 'json',
+                  type: 'post',
+                }).done(result=>{
+                  if(result.success){
+                    layer.close(loading);
+
+                    layer.msg('任务已提交到执行队列', {
+                      icon: 1,
+                      time: 1500
+                    });
+                  }else{
+                    layer.msg(result.message, {
+                      icon: 2,
+                      time: 2000
+                    });
+                  }
+                }).fail(e=>{
+                  console.error(e)
+
+                  let errorMessage = '请求时发生错误'
+
+                  layer.msg(errorMessage, {
+                    icon: 2,
+                    time: 2000
+                  });
+                }).always(()=>layer.close(loading))
+              });
+            }
+
+            window.remove = function(obj) {
+              layer.confirm('确定要删除该用户', {
+                icon: 3,
+                title: '提示'
+              }, function(index) {
+                layer.close(index);
+                let loading = layer.load();
+                $.ajax({
+                  url: "/task/api/task/" + obj.data['id'],
+                  dataType: 'json',
+                  type: 'delete',
+                }).done(result=>{
+                  if(result.success){
+                    layer.close(loading);
+
+                    layer.msg('删除成功', {
+                      icon: 1,
+                      time: 1500
+                    }, function() {
+                      obj.del();
+                    });
+                  }else{
+                    layer.msg(result.message, {
+                      icon: 2,
+                      time: 2000
+                    });
+                  }
+                }).fail(e=>{
+                  console.error(e)
+
+                  let errorMessage = '请求时发生错误'
+
+                  layer.msg(errorMessage, {
+                    icon: 2,
+                    time: 2000
+                  });
+                }).always(()=>layer.close(loading))
+              });
+            }
+
+            window.refresh = function(param) {
+              table.reload('user-table');
+            }
+          })</script>
+</body>
+</html>

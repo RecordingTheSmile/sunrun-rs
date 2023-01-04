@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>修改邮箱</title>
+  <link rel="stylesheet" href="/component/pear/css/pear.css" />
+  <script src="https://lf9-cdn-tos.bytecdntp.com/cdn/expire-1-M/jquery/3.6.0/jquery.min.js" type="application/javascript"></script>
+
+</head>
+<body>
+<form class="layui-form" action="">
+  <div class="mainBox">
+    <div class="main-container">
+      <div class="layui-form-item">
+        <p>提示：点击图片验证码图片可更换验证码图片！</p>
+      </div>
+      <div class="layui-form-item">
+        <label class="layui-form-label">邮箱</label>
+        <div class="layui-input-block">
+          <input type="text" name="email" lay-verify="required|email"
+                 autocomplete="off" placeholder="请输入邮箱" class="layui-input" id="form-email">
+        </div>
+      </div>
+      <div class="layui-form-item">
+        <label class="layui-form-label">验证码</label>
+        <div class="layui-input-block">
+          <input type="text" name="captcha" lay-verify="required"
+                 autocomplete="off" placeholder="请输入验证码" class="layui-input" id="captcha">
+          <img src="/public/api/captcha" style="margin-top:20px" />
+        </div>
+      </div>
+      <div class="layui-form-item">
+        <label class="layui-form-label">邮箱验证码</label>
+        <div class="layui-input-block">
+          <input type="text" name="code" lay-verify="required"
+                 autocomplete="off" placeholder="请输入邮箱验证码" class="layui-input">
+          <input class="layui-btn" type="button" id="sendCode" value="发送验证码" />
+        </div>
+      </div>
+
+
+    </div>
+  </div>
+  <div class="bottom">
+    <div class="button-container">
+      <button type="submit" class="pear-btn pear-btn-primary pear-btn-sm" lay-submit=""
+              lay-filter="email">
+        <i class="layui-icon layui-icon-ok"></i>
+        提交
+      </button>
+      <button type="reset" class="pear-btn pear-btn-sm">
+        <i class="layui-icon layui-icon-refresh"></i>
+        重置
+      </button>
+    </div>
+  </div>
+</form>
+<script src="/component/layui/layui.js"></script>
+<script src="/component/pear/pear.js"></script>
+<script>
+  function sendEmailVerify() {
+    var code = $('#captcha').val()
+    var email=$('#form-email').val()
+
+    if (!code || code.length === 0) {
+      layui.layer.alert('请先输入图形验证码', {icon:2})
+      return
+    }
+
+    if (!/(.+)@(.+)\.(.+)/.test(email)) {
+      layui.layer.alert('邮箱不正确', { icon: 2 })
+      return
+    }
+    let loading = layui.layer.load(1)
+    $.ajax({
+      url: '/public/api/sendEmailCode',
+      method: 'post',
+      contentType: 'application/json',
+      data: JSON.stringify({
+        captcha: code,
+        email:email
+      })
+    }).done(res => {
+      if(res.success){
+        layui.layer.msg('邮件已发送', {icon:1})
+      }else{
+        layui.layer.alert(res.message, {icon:2})
+      }
+    }).fail(e => {
+      console.error(e)
+
+      layui.layer.alert('请求时发生错误', {icon:2})
+    }).always(() => {
+      layui.layer.close(loading)
+    })
+  }
+
+  function getCaptcha() {
+    $('img').attr('src',`/public/api/captcha?r=${Math.random()}`)
+  }
+
+
+  layui.use(['form'], function() {
+    let form = layui.form;
+
+    $(document).ready(()=>{
+      $('img').click(() => {
+        getCaptcha()
+      })
+
+      $('#sendCode').click(()=>{
+        sendEmailVerify()
+      })
+    })
+
+    form.verify({
+      email: [
+        /(.+)@(.+)\.(.+)/,
+        '请输入正确的邮箱'
+      ]
+    })
+
+    form.on('submit(email)', function (data) {
+      let loading=layer.load()
+
+      $.ajax({
+        url: '/user/api/email',
+        data: JSON.stringify(data.field),
+        dataType: 'json',
+        contentType: 'application/json',
+        type: 'PUT'
+      }).done(res => {
+        if(res.success){
+          layer.msg('修改成功', {
+            icon: 1,
+            time: 1500
+          }, function () {
+            parent.layer.close(parent.layer.getFrameIndex(window
+                    .name)); //关闭当前页
+          });
+        }else{
+          layer.msg(res.message, {
+            icon: 2,
+            time:1500
+          })
+        }
+        
+      }).fail((e) => {
+        layer.msg('请求时发生错误', {
+          icon: 2,
+          time:1500
+        })
+      }).always(()=>{
+        layer.close(loading)
+      })
+      return false;
+    });
+  })</script>
+<script></script>
+</body>
+</html>

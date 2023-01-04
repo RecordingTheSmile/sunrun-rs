@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>仪表盘</title>
+  <meta name="renderer" content="webkit">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+  <link rel="stylesheet" href="/component/pear/css/pear.css" />
+  <link rel="stylesheet" href="/admin/css/other/console1.css" />
+  <script src="https://lf9-cdn-tos.bytecdntp.com/cdn/expire-1-M/jquery/3.6.0/jquery.min.js" type="application/javascript"></script>
+</head>
+<body class="pear-container">
+<div>
+
+  <div class="layui-row layui-col-space10">
+    <div class="layui-card">
+      <div class="layui-card-header">
+        寄语
+      </div>
+      <div id="tips" class="layui-card-body" style="line-height:40px;">
+        获取中...
+      </div>
+      <div class="layui-card-body">
+        <input id="refreshTips" type="button" value="换一个" class="layui-btn layui-btn-sm" />
+      </div>
+    </div>
+
+    <div class="layui-col-md12">
+      <div class="layui-card">
+        <div class="layui-card-header">使用方法说明</div>
+        <div class="layui-card-body">
+          <h2>第一步：获取IMEICODE</h2>
+          <p>
+            <a class="layui-btn layui-btn-sm" href="/aipao.apk" target="_blank">点击这里下载软件</a>
+          </p>
+          <p>
+            下载完成后安装打开，点击开始授权。所有弹出的对话框均点击允许
+          </p>
+          <p>
+            将这个软件<b>放到后台</b>，然后打开阳光体育并登录到开始跑步页面，然后返回这个软件。
+          </p>
+          <p>
+            记录下软件界面中央的那串代码。
+          </p>
+          <h2>第二步：在本站创建任务</h2>
+          <p>
+            点击左侧阳光体育任务管理，点击新建，按照提示新建一个任务。IMEICODE就填写上面获取到的那一串代码。
+          </p>
+          <h2>注意事项</h2>
+          <p>IMEICODE有效期为7天，过期后重复第一步，然后在任务管理页面找到那个IMEICODE过期的任务，点击右侧的编辑按钮（任务右边的笔型图标），修改IMEICODE。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="layui-col-md12">
+      <div class="layui-card">
+        <div class="layui-card-header">更 新 日 志</div>
+        <div class="layui-card-body">
+          <ul class="list">
+            <li class="list-item"><span class="title">完成平台设计</span><span class="footer">2022-10-13 20:50</span></li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+<!--</div>-->
+<script src="/component/layui/layui.js"></script>
+<script src="/component/pear/pear.js"></script>
+<script>
+
+  window.debounceTimer = null;
+
+  function getTips() {
+    $('#tips').text('获取中...')
+
+    if (window.debounceTimer) {
+      clearTimeout(window.debounceTimer)
+    }
+
+    window.debounceTimer = setTimeout(() => {
+      $.ajax({
+        url: '//v1.hitokoto.cn',
+        type: 'get',
+        dataType: 'json'
+      }).done((res) => {
+        $('#tips').text(`${res.hitokoto}  ——《${res.from}》`)
+      }).fail(e => {
+        console.error(e)
+        $('#tips').text('获取失败')
+      })
+    },1200)
+  }
+
+  layui.use(['layer', 'element'], function () {
+    let
+            layer = layui.layer,
+            element = layui.element
+
+    $(document).ready(() => {
+      getTips()
+
+      $('#refreshTips').click(() => getTips())
+    })
+  });</script>
+</body>
+</html>

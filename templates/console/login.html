@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+    <title>登录</title>
+    <!-- 样 式 文 件 -->
+    <link rel="stylesheet" href="/component/pear/css/pear.css" />
+    <link rel="stylesheet" href="/admin/css/other/login.css" />
+    <script src="https://lf9-cdn-tos.bytecdntp.com/cdn/expire-1-M/jquery/3.6.0/jquery.min.js" type="application/javascript"></script>
+    <script src="https://lf9-cdn-tos.bytecdntp.com/cdn/expire-1-M/jquery-cookie/1.4.1/jquery.cookie.min.js" type="application/javascript"></script>
+</head>
+<!-- 代 码 结 构 -->
+<body background="/admin/images/background.svg" style="background-size: cover;">
+<form class="layui-form" action="javascript:void(0);">
+    <div class="layui-form-item">
+        <img class="logo" src="/admin/images/logo.png" />
+        <div class="title">阳光小助手</div>
+        <div class="desc">
+            最 具 影 响 力 的 管 理 平 台 之 一
+        </div>
+    </div>
+    <div class="layui-form-item" style="display:none;" id="loginFail">
+        <p style="color:red;">登录会话失效，请重新登录！</p>
+    </div>
+    <div class="layui-form-item">
+        <input name="username" id="form-username" placeholder="请输入用户名" lay-verify="required" hover class="layui-input" />
+    </div>
+    <div class="layui-form-item">
+        <input name="password" placeholder="请输入密码" type="password" lay-verify="required" hover class="layui-input" />
+    </div>
+    <div class="layui-form-item">
+        <input type="checkbox" name="remember" title="记住用户名" lay-skin="primary" id="form-remember">
+    </div>
+    <div class="layui-form-item">
+        <button type="button" class="pear-btn pear-btn-success login" lay-submit lay-filter="login">
+            登 录
+        </button>
+    </div>
+</form>
+<div class="login-operation">
+    <button type="button" class="layui-btn" id="register">
+        注册
+    </button>
+    <button type="button" class="layui-btn" id="forget-password">
+        忘记密码
+    </button>
+</div>
+<!-- 资 源 引 入 -->
+<script src="/component/layui/layui.js"></script>
+<script src="/component/pear/pear.js"></script>
+<script>
+    function getQueryVariable(variable) {
+        var query = window.location.search.substring(1);
+        var vars = query.split("&");
+        for (var i = 0; i < vars.length; i++) {
+            var pair = vars[i].split("=");
+            if (pair[0] == variable) { return pair[1]; }
+        }
+        return (false);
+    }
+    layui.use(['form', 'button', 'popup','common','layer'], function () {
+        var form = layui.form;
+        var button = layui.button;
+        var popup = layui.popup;
+        let common = layui.common;
+        let layer = layui.layer
+
+        $(document).ready(() => {
+            $('#form-username').val($.cookie('username'))
+
+            if ($.cookie('username')) {
+                $('#form-remember').attr('checked','checked')
+            }
+
+            if (getQueryVariable('loginFail')) {
+                $('#loginFail').attr("style", "")
+            }
+
+            form.render()
+        })
+
+        $('#register').click(() => {
+            layer.open({
+                type: 2,
+                title: '注册',
+                shade: 0.1,
+                area: [common.isModile() ? '100%' : '500px', common.isModile() ? '100%' : '400px'],
+                content: '/console/register'
+            });
+        })
+
+        $('#forget-password').click(() => {
+            layer.open({
+                type: 2,
+                title: '重置密码',
+                shade: 0.1,
+                area: [common.isModile() ? '100%' : '500px', common.isModile() ? '100%' : '400px'],
+                content: '/console/forgetPassword'
+            });
+        })
+
+        // 登 录 提 交
+        form.on('submit(login)', function(data) {
+
+            /// 动画
+            let loading = button.load({
+                elem:'.login'
+            })
+
+            $.ajax({
+                url: '/user/api/login',
+                type: 'post',
+                data: JSON.stringify(data.field),
+                dataType: 'json',
+                contentType:'application/json',
+            }).done(res => {
+                if(res.success){
+                    popup.success('登录成功', () => {
+                        if (self !== top) {
+                            parent.window.location.reload()
+                            return
+                        }
+                        let to = getQueryVariable('to')
+
+                        if (to) {
+                            window.location = decodeURIComponent(to)
+                        } else {
+                            window.location = '/console/index'
+                        }
+                    })
+                }else{
+                    popup.failure(res.message ?? '请求时发生错误，请重试')
+                }
+            }).fail((e) => {
+                console.error(e)
+                popup.failure('网络错误，请重试')
+            }).always(() => {
+                loading.stop()
+            })
+            return false;
+        });
+    })</script>
+
+<style>
+    .login-operation{
+        width:100%;
+        display:flex;
+        justify-content:center;
+    }
+</style>
+</body>
+</html>
