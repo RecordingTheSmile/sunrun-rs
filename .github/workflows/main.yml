@@ -35,6 +35,7 @@ jobs:
        uses: vimtor/action-zip@v1
        with:
           files: ${{ steps.compile.outputs.release-dir }}templates/ ${{ steps.compile.outputs.release-dir }}statics/ ${{ steps.compile.outputs.release-dir }}sunrun-rs ${{ steps.compile.outputs.release-dir }}.env
+          recursive: false 
           dest: publish.zip
      - name: Publish
        uses: softprops/action-gh-release@v1
