@@ -14,28 +14,20 @@ jobs:
        uses: heroku/rust-cargo-musl-action@v1
        with:
          command: 'build'
-     - name: Copy .env File
+     - name: Copy Executable File
        uses: canastro/copy-file-action@master
        with:
-        source: ".env.example"
-        target: ${{ steps.compile.outputs.release-dir }}.env
-     - name: Copy templates directory
+        source: ${{ steps.compile.outputs.release-dir }}sunrun-rs
+        target: $GITHUB_WORKSPACE/sunrun-rs
+     - name: Rename .env File
        uses: canastro/copy-file-action@master
        with:
-        source: "templates/"
-        flags: -r
-        target: ${{ steps.compile.outputs.release-dir }}
-     - name: Copy statics directory
-       uses: canastro/copy-file-action@master
-       with:
-        source: "statics/"
-        flags: -r
-        target: ${{ steps.compile.outputs.release-dir }}
+        source: .env.example
+        target: .env
      - name: Install Zip
        uses: montudor/action-zip@v1
      - name: Zip Files
        run: zip -qq -r publish.zip templates/ statics/ sunrun-rs .env
-       working-directory: ${{ steps.compile.outputs.release-dir }}
      - name: Publish
        uses: softprops/action-gh-release@v1
        with: 
