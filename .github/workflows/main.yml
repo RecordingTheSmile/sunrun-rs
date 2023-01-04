@@ -1,0 +1,44 @@
+# .github/workflows/release.yml
+
+on:
+  - workflow_dispatch
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+     - name: Checkout
+       uses: actions/checkout@v3
+     - name: Build
+       id: compile
+       uses: heroku/rust-cargo-musl-action@v1
+       with:
+         command: 'build'
+     - uses: actions/checkout@master
+     - name: copy .env file
+       uses: canastro/copy-file-action@master
+       with:
+        source: ".env.example"
+        target: ${{ steps.compile.outputs.release-dir }}.env
+     - name: copy templates file
+       uses: canastro/copy-file-action@master
+       with:
+        source: "templates/"
+        flags: -r
+        target: ${{ steps.compile.outputs.release-dir }}
+     - name: copy statics file
+       uses: canastro/copy-file-action@master
+       with:
+        source: "statics/"
+        flags: -r
+        target: ${{ steps.compile.outputs.release-dir }}
+     - name: zip files
+       uses: vimtor/action-zip@v1
+       with:
+          files: ${{ steps.compile.outputs.release-dir }}templates/ ${{ steps.compile.outputs.release-dir }}statics/ ${{ steps.compile.outputs.release-dir }}sunrun-rs ${{ steps.compile.outputs.release-dir }}.env
+          dest: publish.zip
+     - name: Publish
+       uses: softprops/action-gh-release@v1
+       with: 
+         files: ${{ steps.compile.outputs.release-dir }}publish.zip
+         tag_name: Autorelease-v${{ github.run_number }}
