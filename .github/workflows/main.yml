@@ -8,13 +8,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
      - name: Checkout
-       uses: actions/checkout@v3
+       uses: actions/checkout@master
      - name: Build
        id: compile
        uses: heroku/rust-cargo-musl-action@v1
        with:
          command: 'build'
-     - uses: actions/checkout@master
      - name: copy .env file
        uses: canastro/copy-file-action@master
        with:
