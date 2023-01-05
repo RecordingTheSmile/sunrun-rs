@@ -28,8 +28,12 @@ jobs:
        uses: montudor/action-zip@v1
      - name: Zip Files
        run: zip -qq -r publish.zip templates/ statics/ sunrun-rs .env
+     - name: Zip Update Files
+       run: zip -qq -r publish_update.zip templates/ statics/ sunrun-rs
      - name: Publish
        uses: softprops/action-gh-release@v1
        with: 
-         files: publish.zip
+         files: |
+           publish.zip
+           publish_update.zip
          tag_name: Autorelease-v${{ github.run_number }}
