@@ -36,4 +36,5 @@ jobs:
          files: |
            publish.zip
            publish_update.zip
+           sunrun-rs
          tag_name: Autorelease-v${{ github.run_number }}
