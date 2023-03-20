@@ -9,7 +9,7 @@
 
 # 技术信息
 1. 平台：Actix-Web
-2. 数据库： PostgreSQL
+2. 数据库： PostgreSQL/MySQL
 3. 前端框架：Layui + Pear Admin
 
 # 协议

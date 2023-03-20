@@ -24,7 +24,7 @@ cbc = { version = "^0", features = ["std"] }
 base64 = "^0"
 actix-web = {version = "^4"}
 dotenv = "^0"
-sea-orm = { version = "^0", features = [ "sqlx-postgres", "runtime-tokio-rustls", "macros" ] }
+sea-orm = { version = "^0", features = [ "sqlx-postgres","sqlx-mysql", "runtime-tokio-rustls", "macros" ] }
 tokio-scheduler-rs = "^0"
 actix-web-validator = "^5"
 validator = { version = "^0", features = ["derive"] }

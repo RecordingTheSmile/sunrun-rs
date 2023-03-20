@@ -1,6 +1,6 @@
 # 如何安装
 1. 首先在项目Release中下载最新的ZIP包(`publish.zip`)，解压到想要安装的文件夹
-2. 安装PostgreSQL，这里以Debian为例
+2. 安装PostgreSQL，这里以Debian为例(如果您希望使用MySQL请跳过此步看下面)
 
 执行以下命令
 ```shell
@@ -27,6 +27,10 @@ sudo -u postgres psql
 
 然后推荐使用Navicat或者其他数据库管理工具连接，用户名为postgres，密码为上面设置的密码，端口为5432。
 
+2. 安装MySQL
+
+参见[安装教程](https://acytoo.com/ladder/install-mysql-on-debian11/)
+
 3. 修改.env文件
 修改zip压缩包中解压出来的.env文件，文件各个配置项目意义如下：
 ```text
@@ -41,6 +45,8 @@ SMTP_ADDRESS="" # SMTP登录的邮箱地址
 SMTP_NICKNAME="阳光小助手" # SMTP发件人昵称
 SMTP_STARTTLS="false" # 是否使用STARTTLS协议登录SMTP，对部分使用STARTTLS协议的提供商(例如Outlook)需要设置为true
 ```
+
+注意：如果您希望使用MySQL，请将DATABASE_URL中开头的`postgres://`改成`mysql://`
 
 4. 运行
 先给予运行权限
