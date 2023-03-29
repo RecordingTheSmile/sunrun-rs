@@ -1,5 +1,6 @@
-use aes::cipher::{BlockEncryptMut, KeyIvInit};
 use aes::cipher::block_padding::Pkcs7;
+use aes::cipher::{BlockEncryptMut, KeyIvInit};
+use base64::Engine;
 use chrono::Timelike;
 use rand::Rng;
 
@@ -41,14 +42,23 @@ impl SunrunCrypto {
         let minute = time_now.minute();
         let second = time_now.second();
 
-        let minute = if minute < 10 { format!("0{minute}") } else { minute.to_string() };
-        let second = if second < 10 { format!("0{second}") } else { second.to_string() };
+        let minute = if minute < 10 {
+            format!("0{minute}")
+        } else {
+            minute.to_string()
+        };
+        let second = if second < 10 {
+            format!("0{second}")
+        } else {
+            second.to_string()
+        };
 
         let encrypt = cbc::Encryptor::<aes::Aes128>::new(KEY.into(), IV.into());
 
-        let result = encrypt.encrypt_padded_vec_mut::<Pkcs7>(format!("{minute}{second}").as_bytes());
+        let result =
+            encrypt.encrypt_padded_vec_mut::<Pkcs7>(format!("{minute}{second}").as_bytes());
 
-        let result = base64::encode(result);
+        let result = base64::engine::general_purpose::STANDARD.encode(result);
         let mut ret = String::from("A");
         ret.push_str(&result);
         ret
