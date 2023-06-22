@@ -17,7 +17,10 @@ impl Scheduler {
         let job_executor = SqlJobExecutor::new(job_storage.to_owned());
         let job_scheduler = JobScheduler::new(job_storage, job_executor);
 
-        job_scheduler.register_job(Box::new(SunrunTask)).await.unwrap();
+        job_scheduler
+            .register_job(Box::new(SunrunTask))
+            .await
+            .unwrap();
         let _ = SCHEDULER.set(job_scheduler);
     }
 

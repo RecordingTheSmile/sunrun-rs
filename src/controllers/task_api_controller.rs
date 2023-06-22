@@ -1,8 +1,11 @@
-use actix_web::{delete, get, HttpResponse, post, put, web};
+use actix_web::{delete, get, post, put, web, HttpResponse};
 use chrono::Local;
 use lazy_static::lazy_static;
-use sea_orm::{ActiveModelTrait, ColumnTrait, EntityTrait, FromQueryResult, PaginatorTrait, QueryFilter, QueryOrder, QuerySelect, Set};
-use serde::Serialize;
+use sea_orm::{
+    sea_query::Expr, ActiveModelTrait, ColumnTrait, Condition, EntityTrait, FromQueryResult,
+    PaginatorTrait, QueryFilter, QueryOrder, QuerySelect, Set,
+};
+use serde::{Deserialize, Serialize};
 use serde_json::json;
 use tokio_scheduler_rs::ScheduleJob;
 
@@ -10,10 +13,12 @@ use migration::{JoinType, Query};
 
 use crate::common::r::R;
 use crate::errors::{BusinessError, BusinessResult};
-use crate::models::datas::session_user_id::SessionUserId;
+use crate::models::datas::session_user_id::JwtUserId;
 use crate::models::dtos::common_models::PageInfo;
-use crate::models::dtos::task_api_models::PostTaskBody;
+use crate::models::dtos::task_api_models::{PostTaskBody, PutTaskStatusBody};
 use crate::services::database::database::Database;
+use crate::services::managers::jwt_manager::JwtManager;
+use crate::services::managers::qr_manager::QrManager;
 use crate::services::managers::sunrun_task_manager::SunrunTaskManager;
 use crate::services::managers::sunrun_tasklog_manager::SunrunTasklogManager;
 use crate::services::sunrun::sunrun::Sunrun;
@@ -25,7 +30,10 @@ lazy_static! {
 }
 
 #[get("/task/api/task", wrap = "LoginWrap")]
-pub async fn get_task(query: actix_web_validator::Query<PageInfo>, user_id: SessionUserId) -> BusinessResult<HttpResponse> {
+pub async fn get_task(
+    query: actix_web_validator::Query<PageInfo>,
+    user_id: JwtUserId,
+) -> BusinessResult<HttpResponse> {
     #[derive(FromQueryResult, Serialize)]
     #[serde(rename_all = "camelCase")]
     struct QueryResult {
@@ -75,8 +83,63 @@ pub async fn get_task(query: actix_web_validator::Query<PageInfo>, user_id: Sess
     }))))
 }
 
+#[get("/task/api/task/{id}", wrap = "LoginWrap")]
+pub async fn get_task_detail(
+    id: web::Path<i64>,
+    user_id: JwtUserId,
+) -> BusinessResult<HttpResponse> {
+    #[derive(FromQueryResult, Serialize, Deserialize)]
+    #[serde(rename_all = "camelCase")]
+    struct QueryResult {
+        pub id: i64,
+        pub length: i64,
+        pub max_speed: f32,
+        pub min_speed: f32,
+        pub latitude: String,
+        pub longitude: String,
+        pub step: i64,
+        pub hour: i32,
+        pub minute: i32,
+        pub email: Option<String>,
+        pub imeicode: String,
+        pub is_iphone: bool,
+        pub is_enable: bool,
+    }
+
+    let result = entity::sunrun_userinfo::Entity::find()
+        .filter(entity::sunrun_userinfo::Column::CreateBy.eq(*user_id))
+        .filter(entity::sunrun_userinfo::Column::Id.eq(*id))
+        .select_only()
+        .column(entity::sunrun_userinfo::Column::Id)
+        .column(entity::sunrun_userinfo::Column::Hour)
+        .column(entity::sunrun_userinfo::Column::Minute)
+        .column(entity::sunrun_userinfo::Column::Length)
+        .column(entity::sunrun_userinfo::Column::MinSpeed)
+        .column(entity::sunrun_userinfo::Column::MaxSpeed)
+        .column(entity::sunrun_userinfo::Column::IsEnable)
+        .column(entity::sunrun_userinfo::Column::IsIphone)
+        .column(entity::sunrun_userinfo::Column::CreateAt)
+        .column(entity::sunrun_userinfo::Column::Latitude)
+        .column(entity::sunrun_userinfo::Column::Longitude)
+        .column(entity::sunrun_userinfo::Column::Step)
+        .column(entity::sunrun_userinfo::Column::Email)
+        .column(entity::sunrun_userinfo::Column::Imeicode)
+        .into_model::<QueryResult>()
+        .one(Database::get_conn())
+        .await?;
+
+    if let Some(result) = result {
+        Ok(HttpResponse::Ok().json(R::json_success_data(result)))
+    } else {
+        Ok(HttpResponse::NotFound().json(R::json_fail("用户不存在", 404)))
+    }
+}
+
 #[post("/task/api/task", wrap = "LoginWrap")]
-pub async fn post_task(body: actix_web_validator::Json<PostTaskBody>, user_id: SessionUserId) -> BusinessResult<HttpResponse> {
+pub async fn post_task(
+    body: actix_web_validator::Json<PostTaskBody>,
+    user_id: JwtUserId,
+) -> BusinessResult<HttpResponse> {
     if let Some(email) = &body.email {
         if !EMAIL_REGEX.is_match(email) {
             return Err(BusinessError::new_code("邮箱格式不正确", 400));
@@ -85,8 +148,10 @@ pub async fn post_task(body: actix_web_validator::Json<PostTaskBody>, user_id: S
 
     let mut sunrun = Sunrun::new(&body.imeicode);
 
-    let _ = sunrun.get_token(body.is_iphone)
-        .await.map_err(|e| BusinessError::new_code(format!("IMEICODE无效：{}", e.message), 400))?;
+    let _ = sunrun
+        .get_token(body.is_iphone)
+        .await
+        .map_err(|e| BusinessError::new_code(format!("IMEICODE无效：{}", e.message), 400))?;
 
     let userinfo = sunrun.get_userinfo().await?;
 
@@ -110,7 +175,9 @@ pub async fn post_task(body: actix_web_validator::Json<PostTaskBody>, user_id: S
         update_at: Set(Local::now().timestamp()),
         create_by: Set(*user_id),
         ..Default::default()
-    }.insert(Database::get_conn()).await?;
+    }
+    .insert(Database::get_conn())
+    .await?;
 
     if body.is_enable {
         SunrunTaskManager::create_task(model.id, body.hour, body.minute).await?;
@@ -120,13 +187,18 @@ pub async fn post_task(body: actix_web_validator::Json<PostTaskBody>, user_id: S
 }
 
 #[put("/task/api/task/{id}", wrap = "LoginWrap")]
-pub async fn put_task(id: web::Path<i64>, body: actix_web_validator::Json<PostTaskBody>, user_id: SessionUserId) -> BusinessResult<HttpResponse> {
+pub async fn put_task(
+    id: web::Path<i64>,
+    body: actix_web_validator::Json<PostTaskBody>,
+    user_id: JwtUserId,
+) -> BusinessResult<HttpResponse> {
     #[derive(FromQueryResult)]
     struct QueryResult {
         pub create_by: i64,
         pub hour: i32,
         pub minute: i32,
         pub is_enable: bool,
+        pub nick_name: String,
     }
 
     let query_result = match entity::sunrun_userinfo::Entity::find_by_id(*id)
@@ -135,15 +207,20 @@ pub async fn put_task(id: web::Path<i64>, body: actix_web_validator::Json<PostTa
         .column(entity::sunrun_userinfo::Column::Hour)
         .column(entity::sunrun_userinfo::Column::Minute)
         .column(entity::sunrun_userinfo::Column::IsEnable)
+        .column(entity::sunrun_userinfo::Column::NickName)
         .into_model::<QueryResult>()
         .one(Database::get_conn())
-        .await? {
+        .await?
+    {
         Some(s) => s,
-        None => return Err(BusinessError::new_code("任务信息不存在", 404))
+        None => return Err(BusinessError::new_code("任务信息不存在", 404)),
     };
 
     if query_result.create_by != *user_id {
-        return Err(BusinessError::new_code("您不可以编辑不属于自己的任务信息", 403));
+        return Err(BusinessError::new_code(
+            "您不可以编辑不属于自己的任务信息",
+            403,
+        ));
     }
 
     if let Some(email) = &body.email {
@@ -154,10 +231,19 @@ pub async fn put_task(id: web::Path<i64>, body: actix_web_validator::Json<PostTa
 
     let mut sunrun = Sunrun::new(&body.imeicode);
 
-    let _ = sunrun.get_token(body.is_iphone).await
+    let _ = sunrun
+        .get_token(body.is_iphone)
+        .await
         .map_err(|e| BusinessError::new_code(format!("IMEICODE无效：{}", e.message), 400))?;
 
     let userinfo = sunrun.get_userinfo().await?;
+
+    if userinfo.nick_name != query_result.nick_name {
+        return Err(BusinessError::new_code(
+            "用户名不一致，如您希望新建用户请不要在此修改",
+            400,
+        ));
+    }
 
     entity::sunrun_userinfo::ActiveModel {
         id: Set(*id),
@@ -178,9 +264,14 @@ pub async fn put_task(id: web::Path<i64>, body: actix_web_validator::Json<PostTa
         is_enable: Set(body.is_enable),
         update_at: Set(Local::now().timestamp()),
         ..Default::default()
-    }.update(Database::get_conn()).await?;
+    }
+    .update(Database::get_conn())
+    .await?;
 
-    if query_result.is_enable != body.is_enable || query_result.hour != body.hour || query_result.minute != body.minute {
+    if query_result.is_enable != body.is_enable
+        || query_result.hour != body.hour
+        || query_result.minute != body.minute
+    {
         SunrunTaskManager::delete_task(*id).await?;
         if body.is_enable {
             SunrunTaskManager::create_task(*id, body.hour, body.minute).await?;
@@ -190,8 +281,64 @@ pub async fn put_task(id: web::Path<i64>, body: actix_web_validator::Json<PostTa
     Ok(HttpResponse::Ok().json(R::json_success()))
 }
 
+#[put("/task/api/task/{id}/taskStatus", wrap = "LoginWrap")]
+pub async fn put_task_status(
+    id: web::Path<i64>,
+    body: actix_web::web::Json<PutTaskStatusBody>,
+    user_id: JwtUserId,
+) -> BusinessResult<HttpResponse> {
+    #[derive(FromQueryResult)]
+    struct QueryResult {
+        pub is_enable: bool,
+        pub hour: i32,
+        pub minute: i32,
+    }
+
+    let query_result = match entity::sunrun_userinfo::Entity::find()
+        .filter(
+            Condition::all()
+                .add(entity::sunrun_userinfo::Column::Id.eq(*id))
+                .add(entity::sunrun_userinfo::Column::CreateBy.eq(*user_id)),
+        )
+        .select_only()
+        .column(entity::sunrun_userinfo::Column::IsEnable)
+        .column(entity::sunrun_userinfo::Column::Hour)
+        .column(entity::sunrun_userinfo::Column::Minute)
+        .into_model::<QueryResult>()
+        .one(Database::get_conn())
+        .await?
+    {
+        Some(v) => v,
+        None => return Err(BusinessError::new_code("任务不存在", 404)),
+    };
+
+    if body.is_enable == query_result.is_enable {
+        return Ok(HttpResponse::Ok().json(R::json_success()));
+    }
+
+    SunrunTaskManager::delete_task(*id).await?;
+    if body.is_enable {
+        SunrunTaskManager::create_task(*id, query_result.hour, query_result.minute).await?;
+    }
+
+    entity::sunrun_userinfo::Entity::update_many()
+        .filter(
+            Condition::all()
+                .add(entity::sunrun_userinfo::Column::Id.eq(*id))
+                .add(entity::sunrun_userinfo::Column::CreateBy.eq(*user_id)),
+        )
+        .col_expr(
+            entity::sunrun_userinfo::Column::IsEnable,
+            Expr::value(body.is_enable),
+        )
+        .exec(Database::get_conn())
+        .await?;
+
+    Ok(HttpResponse::Ok().json(R::json_success()))
+}
+
 #[delete("/task/api/task/{id}", wrap = "LoginWrap")]
-pub async fn delete_task(id: web::Path<i64>, user_id: SessionUserId) -> BusinessResult<HttpResponse> {
+pub async fn delete_task(id: web::Path<i64>, user_id: JwtUserId) -> BusinessResult<HttpResponse> {
     #[derive(FromQueryResult)]
     struct QueryResult {
         pub create_by: i64,
@@ -202,16 +349,19 @@ pub async fn delete_task(id: web::Path<i64>, user_id: SessionUserId) -> Business
         .column(entity::sunrun_userinfo::Column::CreateBy)
         .into_model::<QueryResult>()
         .one(Database::get_conn())
-        .await? {
+        .await?
+    {
         Some(u) => u,
-        None => return Err(BusinessError::new_code("任务不存在", 404))
+        None => return Err(BusinessError::new_code("任务不存在", 404)),
     };
 
     if query_result.create_by != *user_id {
         return Err(BusinessError::new_code("您不能删除不属于自己的任务", 403));
     }
 
-    entity::sunrun_userinfo::Entity::delete_by_id(*id).exec(Database::get_conn()).await?;
+    entity::sunrun_userinfo::Entity::delete_by_id(*id)
+        .exec(Database::get_conn())
+        .await?;
 
     SunrunTaskManager::delete_task(*id).await?;
     SunrunTasklogManager::delete_log_by_user_info_id(*id).await?;
@@ -220,7 +370,10 @@ pub async fn delete_task(id: web::Path<i64>, user_id: SessionUserId) -> Business
 }
 
 #[post("/task/api/task/{id}/executeNow", wrap = "LoginWrap")]
-pub async fn post_execute_now(id: web::Path<i64>, user_id: SessionUserId) -> BusinessResult<HttpResponse> {
+pub async fn post_execute_now(
+    id: web::Path<i64>,
+    user_id: JwtUserId,
+) -> BusinessResult<HttpResponse> {
     #[derive(FromQueryResult)]
     struct QueryResult {
         pub create_by: i64,
@@ -229,23 +382,30 @@ pub async fn post_execute_now(id: web::Path<i64>, user_id: SessionUserId) -> Bus
     }
 
     let query_result = match entity::sunrun_userinfo::Entity::find_by_id(*id)
-        .join_rev(JoinType::InnerJoin, entity::sunrun_task::Entity::belongs_to(entity::sunrun_userinfo::Entity)
-            .from(entity::sunrun_task::Column::TaskInfoId)
-            .to(entity::sunrun_userinfo::Column::Id)
-            .into())
-        .join_rev(JoinType::InnerJoin, entity::job_storage::Entity::belongs_to(entity::sunrun_task::Entity)
-            .from(entity::job_storage::Column::Id)
-            .to(entity::sunrun_task::Column::TaskId)
-            .into())
+        .join_rev(
+            JoinType::InnerJoin,
+            entity::sunrun_task::Entity::belongs_to(entity::sunrun_userinfo::Entity)
+                .from(entity::sunrun_task::Column::TaskInfoId)
+                .to(entity::sunrun_userinfo::Column::Id)
+                .into(),
+        )
+        .join_rev(
+            JoinType::InnerJoin,
+            entity::job_storage::Entity::belongs_to(entity::sunrun_task::Entity)
+                .from(entity::job_storage::Column::Id)
+                .to(entity::sunrun_task::Column::TaskId)
+                .into(),
+        )
         .select_only()
         .column(entity::sunrun_userinfo::Column::CreateBy)
         .column(entity::job_storage::Column::Args)
         .column_as(entity::job_storage::Column::Id, "task_id")
         .into_model::<QueryResult>()
         .one(Database::get_conn())
-        .await? {
+        .await?
+    {
         Some(q) => q,
-        None => return Err(BusinessError::new_code("任务不存在", 404))
+        None => return Err(BusinessError::new_code("任务不存在", 404)),
     };
 
     if query_result.create_by != *user_id {
@@ -260,7 +420,10 @@ pub async fn post_execute_now(id: web::Path<i64>, user_id: SessionUserId) -> Bus
 }
 
 #[get("/task/api/taskLog", wrap = "LoginWrap")]
-pub async fn get_task_log(query: actix_web_validator::Query<PageInfo>, user_id: SessionUserId) -> BusinessResult<HttpResponse> {
+pub async fn get_task_log(
+    query: actix_web_validator::Query<PageInfo>,
+    user_id: JwtUserId,
+) -> BusinessResult<HttpResponse> {
     #[derive(Serialize, FromQueryResult)]
     #[serde(rename_all = "camelCase")]
     struct QueryResult {
@@ -273,10 +436,13 @@ pub async fn get_task_log(query: actix_web_validator::Query<PageInfo>, user_id: 
     }
 
     let query_result = entity::sunrun_tasklog::Entity::find()
-        .join_rev(JoinType::InnerJoin, entity::sunrun_userinfo::Entity::belongs_to(entity::sunrun_tasklog::Entity)
-            .from(entity::sunrun_userinfo::Column::Id)
-            .to(entity::sunrun_tasklog::Column::TaskInfoId)
-            .into())
+        .join_rev(
+            JoinType::InnerJoin,
+            entity::sunrun_userinfo::Entity::belongs_to(entity::sunrun_tasklog::Entity)
+                .from(entity::sunrun_userinfo::Column::Id)
+                .to(entity::sunrun_tasklog::Column::TaskInfoId)
+                .into(),
+        )
         .filter(entity::sunrun_userinfo::Column::CreateBy.eq(*user_id))
         .order_by_desc(entity::sunrun_tasklog::Column::CreateAt)
         .limit(query.limit)
@@ -293,10 +459,13 @@ pub async fn get_task_log(query: actix_web_validator::Query<PageInfo>, user_id: 
         .await?;
 
     let total = entity::sunrun_tasklog::Entity::find()
-        .join_rev(JoinType::InnerJoin, entity::sunrun_userinfo::Entity::belongs_to(entity::sunrun_tasklog::Entity)
-            .from(entity::sunrun_userinfo::Column::Id)
-            .to(entity::sunrun_tasklog::Column::TaskInfoId)
-            .into())
+        .join_rev(
+            JoinType::InnerJoin,
+            entity::sunrun_userinfo::Entity::belongs_to(entity::sunrun_tasklog::Entity)
+                .from(entity::sunrun_userinfo::Column::Id)
+                .to(entity::sunrun_tasklog::Column::TaskInfoId)
+                .into(),
+        )
         .filter(entity::sunrun_userinfo::Column::CreateBy.eq(*user_id))
         .count(Database::get_conn())
         .await?;
@@ -308,21 +477,28 @@ pub async fn get_task_log(query: actix_web_validator::Query<PageInfo>, user_id: 
 }
 
 #[delete("/task/api/taskLog", wrap = "LoginWrap")]
-pub async fn delete_task_log(user_id: SessionUserId) -> BusinessResult<HttpResponse> {
+pub async fn delete_task_log(user_id: JwtUserId) -> BusinessResult<HttpResponse> {
     entity::sunrun_tasklog::Entity::delete_many()
-        .filter(entity::sunrun_tasklog::Column::TaskInfoId.in_subquery(
-            Query::select()
-                .column(entity::sunrun_userinfo::Column::Id)
-                .from(entity::sunrun_userinfo::Entity)
-                .and_where(entity::sunrun_userinfo::Column::CreateBy.eq(*user_id))
-                .distinct()
-                .to_owned()
-        )).exec(Database::get_conn()).await?;
+        .filter(
+            entity::sunrun_tasklog::Column::TaskInfoId.in_subquery(
+                Query::select()
+                    .column(entity::sunrun_userinfo::Column::Id)
+                    .from(entity::sunrun_userinfo::Entity)
+                    .and_where(entity::sunrun_userinfo::Column::CreateBy.eq(*user_id))
+                    .distinct()
+                    .to_owned(),
+            ),
+        )
+        .exec(Database::get_conn())
+        .await?;
     Ok(HttpResponse::Ok().json(R::json_success()))
 }
 
-#[get("/task/api/task/{id}/status")]
-pub async fn get_task_status(user_id: SessionUserId, id: web::Path<i64>) -> BusinessResult<HttpResponse> {
+#[get("/task/api/task/{id}/status", wrap = "LoginWrap")]
+pub async fn get_task_status(
+    user_id: JwtUserId,
+    id: web::Path<i64>,
+) -> BusinessResult<HttpResponse> {
     #[derive(FromQueryResult)]
     struct QueryResult {
         pub imeicode: String,
@@ -337,9 +513,10 @@ pub async fn get_task_status(user_id: SessionUserId, id: web::Path<i64>) -> Busi
         .column(entity::sunrun_userinfo::Column::IsIphone)
         .into_model::<QueryResult>()
         .one(Database::get_conn())
-        .await? {
+        .await?
+    {
         Some(q) => q,
-        None => return Err(BusinessError::new_code("任务不存在", 404))
+        None => return Err(BusinessError::new_code("任务不存在", 404)),
     };
 
     if query_result.create_by != *user_id {
@@ -354,4 +531,23 @@ pub async fn get_task_status(user_id: SessionUserId, id: web::Path<i64>) -> Busi
         "totalTimes":run_result.run_times,
         "morningTimes":run_result.morning_run_times
     }))))
+}
+
+#[get("/task/api/imeicode/{uuid}", wrap = "LoginWrap")]
+pub async fn get_imeicode(uuid: web::Path<String>) -> BusinessResult<HttpResponse> {
+    let result = QrManager::get_qr_result(&*uuid).await?;
+    Ok(HttpResponse::Ok().json(R::json_success_data(json!({ "imeicode": result }))))
+}
+
+#[get("/task/api/createWxQrToken")]
+pub async fn create_wx_qr_token() -> BusinessResult<HttpResponse> {
+    let mut val = serde_json::Value::default();
+
+    let qr_id = uuid::Uuid::new_v4().to_string();
+
+    val["id"] = qr_id.as_str().into();
+
+    // token 10分钟有效
+    let token = JwtManager::get_global().get_signed_token_with_exp(val, 10 * 60)?;
+    Ok(HttpResponse::Ok().json(R::json_success_data(json!({ "token": token,"id":qr_id }))))
 }

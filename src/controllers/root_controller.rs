@@ -1,9 +1,10 @@
-use actix_web::{get, HttpResponse};
+use actix_web::{get, Responder};
 
-use crate::errors::BusinessResult;
-use crate::services::template::template::ActixHttpResponseExt;
+use crate::errors::{BusinessError};
 
 #[get("/")]
-pub async fn get_root() -> BusinessResult<HttpResponse> {
-    Ok(HttpResponse::Ok().html("index.html", &tera::Context::new()))
+pub async fn get_root() -> impl Responder {
+    actix_files::NamedFile::open_async("./statics/index.html")
+        .await
+        .map_err(|_| BusinessError::new("首页文件不存在，请联系管理员修复"))
 }

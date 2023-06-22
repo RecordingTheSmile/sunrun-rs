@@ -7,8 +7,9 @@ use tokio::task::JoinHandle;
 use tokio_scheduler_rs::{JobExecutor, JobStorage};
 
 pub struct SqlJobExecutor<Tz>
-    where Tz: chrono::TimeZone + Send + Sync,
-          Tz::Offset: Send + Sync
+where
+    Tz: chrono::TimeZone + Send + Sync,
+    Tz::Offset: Send + Sync,
 {
     jobs: Arc<dyn JobStorage<Tz>>,
     tasks: Arc<RwLock<Vec<JoinHandle<()>>>>,
@@ -17,8 +18,9 @@ pub struct SqlJobExecutor<Tz>
 }
 
 impl<Tz> SqlJobExecutor<Tz>
-    where Tz: chrono::TimeZone + Send + Sync,
-          Tz::Offset: Send + Sync
+where
+    Tz: chrono::TimeZone + Send + Sync,
+    Tz::Offset: Send + Sync,
 {
     pub fn new(jobs: Arc<dyn JobStorage<Tz>>) -> Self {
         let shutdown_chan = tokio::sync::broadcast::channel(1);
@@ -32,8 +34,9 @@ impl<Tz> SqlJobExecutor<Tz>
 }
 
 impl<Tz> JobExecutor for SqlJobExecutor<Tz>
-    where Tz: chrono::TimeZone + Send + Sync + 'static,
-          Tz::Offset: Send + Sync
+where
+    Tz: chrono::TimeZone + Send + Sync + 'static,
+    Tz::Offset: Send + Sync,
 {
     fn start(&self) -> JoinHandle<()> {
         let storage = self.jobs.to_owned();
@@ -44,7 +47,7 @@ impl<Tz> JobExecutor for SqlJobExecutor<Tz>
             loop {
                 let should_next = match should_next.read() {
                     Ok(s) => *s,
-                    Err(_) => false
+                    Err(_) => false,
                 };
 
                 if !should_next {
@@ -53,7 +56,7 @@ impl<Tz> JobExecutor for SqlJobExecutor<Tz>
                 }
                 let should_exec = match storage.get_all_should_execute_jobs().await {
                     Ok(t) => t,
-                    Err(_) => continue
+                    Err(_) => continue,
                 };
                 for job in should_exec {
                     let handle = tokio::spawn(async move {
@@ -69,7 +72,7 @@ impl<Tz> JobExecutor for SqlJobExecutor<Tz>
         })
     }
 
-    fn stop(&self) -> Pin<Box<dyn Future<Output=()>>> {
+    fn stop(&self) -> Pin<Box<dyn Future<Output = ()>>> {
         let mut shutdown_recv = self.shutdown_channel.subscribe();
         let tasks = self.tasks.to_owned();
         *self.should_next.write().unwrap() = false;

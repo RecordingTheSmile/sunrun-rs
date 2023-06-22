@@ -1,20 +1,19 @@
 use std::env::VarError;
 use std::fmt::{Display, Formatter};
 
-use actix_web::{HttpResponse, HttpResponseBuilder, ResponseError};
 use actix_web::body::BoxBody;
 use actix_web::http::StatusCode;
+use actix_web::{HttpResponse, HttpResponseBuilder, ResponseError};
+use jwt_simple::JWTError;
 use lettre::address::AddressError;
 use reqwest::Error;
 
 use crate::common::r::R;
-use crate::services::template::template::ActixHttpResponseExt;
 
 #[derive(Debug)]
 pub struct BusinessError {
     pub code: u16,
     pub message: String,
-    is_html: bool,
 }
 
 pub type BusinessResult<T> = Result<T, BusinessError>;
@@ -34,7 +33,11 @@ macro_rules! from_type_to_business_error {
 
 impl Display for BusinessError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "BusinessError:\nCode:{}\nMessage:{}", self.code, self.message)
+        write!(
+            f,
+            "BusinessError:\nCode:{}\nMessage:{}",
+            self.code, self.message
+        )
     }
 }
 
@@ -45,7 +48,6 @@ impl Default for BusinessError {
         Self {
             code: 500,
             message: "未知的系统错误".into(),
-            is_html: false,
         }
     }
 }
@@ -55,7 +57,6 @@ impl BusinessError {
         Self {
             message: message.to_string(),
             code: 503,
-            is_html: false,
         }
     }
 
@@ -63,23 +64,14 @@ impl BusinessError {
         Self {
             message: message.to_string(),
             code,
-            is_html: false,
-        }
-    }
-
-    pub fn set_html(self, is_html: bool) -> Self {
-        Self {
-            is_html,
-            ..self
         }
     }
 }
 
-from_type_to_business_error!(anyhow::Error,
+from_type_to_business_error!(
+    anyhow::Error,
     bcrypt::BcryptError,
     sea_orm::DbErr,
-    actix_session::SessionGetError,
-    actix_session::SessionInsertError,
     tokio_scheduler_rs::errors::SchedulerError,
     uuid::Error,
     lettre::error::Error,
@@ -88,14 +80,14 @@ from_type_to_business_error!(anyhow::Error,
 
 impl From<reqwest::Error> for BusinessError {
     fn from(value: Error) -> Self {
-        log::error!("ReqwestError: {:#?}",value);
+        log::error!("ReqwestError: {:#?}", value);
         Self::new("网络请求错误")
     }
 }
 
 impl From<std::env::VarError> for BusinessError {
     fn from(value: VarError) -> Self {
-        log::error!("VarError: {}",value.to_string());
+        log::error!("VarError: {}", value.to_string());
         Self::default()
     }
 }
@@ -111,31 +103,18 @@ impl ResponseError for BusinessError {
         StatusCode::OK
     }
     fn error_response(&self) -> HttpResponse<BoxBody> {
-        if self.is_html {
-            let mut ctx = tera::Context::new();
-            ctx.insert("message", &self.message);
-            ctx.insert("code", &self.code);
-            HttpResponseBuilder::new(self.status_code())
-                .html("error.html", &ctx)
-        } else {
-            HttpResponseBuilder::new(self.status_code())
-                .json(R::json_fail(&self.message, self.code))
-        }
+        HttpResponseBuilder::new(self.status_code()).json(R::json_fail(&self.message, self.code))
     }
 }
+impl From<jwt_simple::JWTError> for BusinessError {
+    fn from(value: JWTError) -> Self {
+        let (code, message) = match value {
+            JWTError::ClockDrift => (401, "JWT签发时间错误"),
+            JWTError::OldTokenReused => (401, "登录信息失效，请重新登录"),
+            JWTError::TokenHasExpired => (401, "登录信息过期，请重新登录"),
+            _ => (401, "Token无效，请重新登录"),
+        };
 
-pub trait ResultExts<T> {
-    fn set_html(self, is_ajax: bool) -> Result<T, BusinessError>;
-}
-
-impl<T, ToBusinessError> ResultExts<T> for Result<T, ToBusinessError>
-    where ToBusinessError: Into<BusinessError> + std::fmt::Debug
-{
-    fn set_html(self, is_ajax: bool) -> Result<T, BusinessError> {
-        if let Err(e) = self {
-            let business_error = e.into().set_html(is_ajax);
-            return Err(business_error);
-        }
-        Ok(self.unwrap())
+        Self::new_code(message, code)
     }
 }

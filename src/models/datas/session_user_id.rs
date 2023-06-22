@@ -2,29 +2,27 @@ use std::future::Future;
 use std::ops::Deref;
 use std::pin::Pin;
 
-use actix_session::SessionExt;
-use actix_web::{FromRequest, HttpRequest};
 use actix_web::dev::Payload;
+use actix_web::{FromRequest, HttpRequest};
 use sea_orm::{ColumnTrait, EntityTrait, FromQueryResult, QueryFilter, QuerySelect};
 
-use crate::common::actix_exts::CommonHttpRequestExts;
 use crate::errors::{BusinessError, BusinessResult};
-use crate::errors::business_error::ResultExts;
+use crate::models::datas::jwt_data::JwtData;
 use crate::services::database::database::Database;
 
-pub struct SessionUserId(i64);
+pub struct JwtUserId(i64);
 
-impl FromRequest for SessionUserId {
+impl FromRequest for JwtUserId {
     type Error = BusinessError;
-    type Future = Pin<Box<dyn Future<Output=BusinessResult<Self>>>>;
+    type Future = Pin<Box<dyn Future<Output = BusinessResult<Self>>>>;
 
-    fn from_request(req: &HttpRequest, _: &mut Payload) -> Self::Future {
-        let session = req.get_session();
-        let is_html = !req.is_ajax();
+    fn from_request(req: &HttpRequest, payload: &mut Payload) -> Self::Future {
+        let jwt_data = JwtData::from_request(req, payload);
         Box::pin(async move {
-            let user_id = match session.get::<i64>("user_id")? {
+            let jwt_data = jwt_data.await?;
+            let user_id = match jwt_data["user_id"].as_i64() {
                 Some(u) => u,
-                None => return Err(BusinessError::new_code("请先登录", 401).set_html(is_html))
+                None => return Err(BusinessError::new_code("请先登录", 401)),
             };
 
             #[derive(FromQueryResult)]
@@ -38,16 +36,16 @@ impl FromRequest for SessionUserId {
                 .column(entity::user::Column::CanLogin)
                 .into_model::<QueryResult>()
                 .one(Database::get_conn())
-                .await.set_html(is_html)? {
+                .await?
+            {
                 Some(u) => u,
                 None => {
-                    session.remove("user_id");
-                    return Err(BusinessError::new_code("用户信息有误，请重新登录", 401).set_html(is_html));
+                    return Err(BusinessError::new_code("用户信息有误，请重新登录", 401));
                 }
             };
 
             if !user_query.can_login {
-                return Err(BusinessError::new_code("您的账户已被封禁", 401).set_html(is_html));
+                return Err(BusinessError::new_code("您的账户已被封禁", 401));
             }
 
             Ok(Self(user_id))
@@ -55,7 +53,7 @@ impl FromRequest for SessionUserId {
     }
 }
 
-impl Deref for SessionUserId {
+impl Deref for JwtUserId {
     type Target = i64;
 
     fn deref(&self) -> &Self::Target {

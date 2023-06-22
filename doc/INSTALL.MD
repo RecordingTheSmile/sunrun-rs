@@ -36,7 +36,7 @@ sudo -u postgres psql
 ```text
 LISTEN_ADDR = ""  # 监听地址，格式为IP:端口。如果只想监听本地则填写127.0.0.1:端口号，如果想直接接受远程链接填写0.0.0.0:端口号
 DATABASE_URL = "postgres://username:password@host:port/database"  # 数据库连接URL，修改其中username、password、host、port和database为上面数据库中创建的信息
-SESSION_KEY = "" # Session加密KEY，至少64位
+SESSION_KEY = "" # Session加密KEY，至少16位
 SMTP_HOST="" # SMTP主机地址
 SMTP_PORT="" # SMTP端口，一般为465，少数使用STARTTLS的提供商(例如Outlook)为587
 SMTP_USERNAME="" # SMTP登录用户名，一般就是邮箱地址
@@ -63,3 +63,6 @@ sudo chmod +x sunrun-rs
 ```shell
 nohup ./sunrun-rs &
 ```
+
+# 登录信息
+本应用默认的管理员用户名和密码均为`admin123`，安装完成后请及时登录项目自行修改！

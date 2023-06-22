@@ -28,3 +28,9 @@ fn validate_lan_lon(lan_lon: &str) -> Result<(), ValidationError> {
         Err(ValidationError::new("Invalid Lan Lon Format"))
     }
 }
+
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PutTaskStatusBody {
+    pub is_enable: bool,
+}

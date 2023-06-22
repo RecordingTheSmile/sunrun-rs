@@ -1,11 +1,13 @@
-use actix_web::{get, HttpResponse, put, web};
-use sea_orm::{ActiveModelTrait, EntityTrait, FromQueryResult, PaginatorTrait, QueryOrder, QuerySelect, Set};
+use actix_web::{get, put, web, HttpResponse};
+use sea_orm::{
+    ActiveModelTrait, EntityTrait, FromQueryResult, PaginatorTrait, QueryOrder, QuerySelect, Set,
+};
 use serde::Serialize;
 use serde_json::json;
 
 use crate::common::r::R;
 use crate::errors::{BusinessError, BusinessResult};
-use crate::models::datas::session_user_id::SessionUserId;
+use crate::models::datas::session_user_id::JwtUserId;
 use crate::models::dtos::admin_api_models::{PutCanLoginBody, PutIsAdminBody};
 use crate::models::dtos::common_models::PageInfo;
 use crate::services::database::database::Database;
@@ -40,7 +42,8 @@ pub async fn get_user(query: actix_web_validator::Query<PageInfo>) -> BusinessRe
         .await?;
 
     let total = entity::user::Entity::find()
-        .count(Database::get_conn()).await?;
+        .count(Database::get_conn())
+        .await?;
 
     Ok(HttpResponse::Ok().json(R::json_success_data(json!({
         "total":total,
@@ -49,7 +52,11 @@ pub async fn get_user(query: actix_web_validator::Query<PageInfo>) -> BusinessRe
 }
 
 #[put("/admin/api/user/{id}/loginStatus", wrap = "AdminLoginWrap")]
-pub async fn put_can_login(id: web::Path<i64>, body: web::Json<PutCanLoginBody>, user_id: SessionUserId) -> BusinessResult<HttpResponse> {
+pub async fn put_can_login(
+    id: web::Path<i64>,
+    body: web::Json<PutCanLoginBody>,
+    user_id: JwtUserId,
+) -> BusinessResult<HttpResponse> {
     if *user_id == *id {
         return Err(BusinessError::new_code("您不能操作自己", 400));
     }
@@ -58,12 +65,18 @@ pub async fn put_can_login(id: web::Path<i64>, body: web::Json<PutCanLoginBody>,
         id: Set(*id),
         can_login: Set(body.can_login),
         ..Default::default()
-    }.update(Database::get_conn()).await?;
+    }
+    .update(Database::get_conn())
+    .await?;
     Ok(HttpResponse::Ok().json(R::json_success()))
 }
 
 #[put("/admin/api/user/{id}/isAdmin", wrap = "AdminLoginWrap")]
-pub async fn put_is_admin(id: web::Path<i64>, body: web::Json<PutIsAdminBody>, user_id: SessionUserId) -> BusinessResult<HttpResponse> {
+pub async fn put_is_admin(
+    id: web::Path<i64>,
+    body: web::Json<PutIsAdminBody>,
+    user_id: JwtUserId,
+) -> BusinessResult<HttpResponse> {
     if *user_id == *id {
         return Err(BusinessError::new_code("您不能操作自己", 403));
     }
@@ -72,6 +85,8 @@ pub async fn put_is_admin(id: web::Path<i64>, body: web::Json<PutIsAdminBody>, u
         id: Set(*id),
         is_admin: Set(body.is_admin),
         ..Default::default()
-    }.update(Database::get_conn()).await?;
+    }
+    .update(Database::get_conn())
+    .await?;
     Ok(HttpResponse::Ok().json(R::json_success()))
 }

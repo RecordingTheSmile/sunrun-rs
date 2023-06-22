@@ -7,10 +7,13 @@
 * 任务结果邮件通知
 * 占用极小的资源
 
+# 文档
+[点击`doc`文件夹查看文档](doc)
+
 # 技术信息
 1. 平台：Actix-Web
 2. 数据库： PostgreSQL/MySQL
-3. 前端框架：Layui + Pear Admin
+3. 前端框架：Vue3 + Ant Design Vue
 
 # 协议
 GPL

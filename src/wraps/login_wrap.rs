@@ -7,9 +7,7 @@ use std::task::{Context, Poll};
 use actix_web::dev::{Payload, Service, ServiceRequest, ServiceResponse, Transform};
 use actix_web::FromRequest;
 
-use crate::common::actix_exts::CommonHttpRequestExts;
-use crate::errors::business_error::ResultExts;
-use crate::models::datas::session_user_id::SessionUserId;
+use crate::models::datas::session_user_id::JwtUserId;
 
 pub struct LoginWrap;
 
@@ -18,8 +16,10 @@ pub struct LoginWrapService<S> {
 }
 
 impl<S, B> Transform<S, ServiceRequest> for LoginWrap
-    where S: Service<ServiceRequest, Response=ServiceResponse<B>, Error=actix_web::error::Error> + 'static,
-          B: 'static
+where
+    S: Service<ServiceRequest, Response = ServiceResponse<B>, Error = actix_web::error::Error>
+        + 'static,
+    B: 'static,
 {
     type Response = ServiceResponse<B>;
     type Error = actix_web::error::Error;
@@ -29,19 +29,21 @@ impl<S, B> Transform<S, ServiceRequest> for LoginWrap
 
     fn new_transform(&self, service: S) -> Self::Future {
         std::future::ready(Ok(LoginWrapService {
-            service: Rc::new(RefCell::new(service))
+            service: Rc::new(RefCell::new(service)),
         }))
     }
 }
 
 impl<S, B> Service<ServiceRequest> for LoginWrapService<S>
-    where S: Service<ServiceRequest, Response=ServiceResponse<B>, Error=actix_web::error::Error> + 'static,
-          B: 'static,
-          S::Future: 'static
+where
+    S: Service<ServiceRequest, Response = ServiceResponse<B>, Error = actix_web::error::Error>
+        + 'static,
+    B: 'static,
+    S::Future: 'static,
 {
     type Response = ServiceResponse<B>;
     type Error = actix_web::error::Error;
-    type Future = Pin<Box<dyn Future<Output=Result<Self::Response, Self::Error>>>>;
+    type Future = Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>>>>;
 
     fn poll_ready(&self, ctx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
         self.service.poll_ready(ctx)
@@ -49,9 +51,8 @@ impl<S, B> Service<ServiceRequest> for LoginWrapService<S>
 
     fn call(&self, req: ServiceRequest) -> Self::Future {
         let svc = self.service.to_owned();
-        let is_html = !req.is_ajax();
         Box::pin(async move {
-            let _ = SessionUserId::from_request(req.request(), &mut Payload::None).await.set_html(is_html)?;
+            let _ = JwtUserId::from_request(req.request(), &mut Payload::None).await;
             Ok(svc.call(req).await?)
         })
     }

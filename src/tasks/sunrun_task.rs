@@ -22,7 +22,7 @@ impl ScheduleJob for SunrunTask {
         String::from(TASK_NAME)
     }
 
-    fn execute(&self, id: String, args: Option<Value>) -> Pin<Box<dyn Future<Output=()> + Send>> {
+    fn execute(&self, id: String, args: Option<Value>) -> Pin<Box<dyn Future<Output = ()> + Send>> {
         Box::pin(async move {
             let user_info_id = match args {
                 Some(a) => match a["id"].as_i64() {
@@ -40,7 +40,8 @@ impl ScheduleJob for SunrunTask {
 
             let sunrun_userinfo = match entity::sunrun_userinfo::Entity::find_by_id(user_info_id)
                 .one(Database::get_conn())
-                .await {
+                .await
+            {
                 Ok(s) => match s {
                     Some(s) => s,
                     None => {
@@ -49,7 +50,7 @@ impl ScheduleJob for SunrunTask {
                     }
                 },
                 Err(e) => {
-                    log::error!("Database Error: {:?}",e);
+                    log::error!("Database Error: {:?}", e);
                     return;
                 }
             };
@@ -60,7 +61,12 @@ impl ScheduleJob for SunrunTask {
                     Ok(_) => (),
                     Err(e) => {
                         if i >= 3 {
-                            let _ = SunrunTasklogManager::create_log(sunrun_userinfo.id, false, &e.message).await;
+                            let _ = SunrunTasklogManager::create_log(
+                                sunrun_userinfo.id,
+                                false,
+                                &e.message,
+                            )
+                            .await;
                             if let Some(email) = sunrun_userinfo.email.to_owned() {
                                 EmailManager::send_result_email(email, false, Some(e.message));
                             }
@@ -70,35 +76,45 @@ impl ScheduleJob for SunrunTask {
                     }
                 };
 
-                match sunrun.start_run(SunrunUserInfo {
-                    length: sunrun_userinfo.length,
-                    max_speed: sunrun_userinfo.max_speed as f64,
-                    min_speed: sunrun_userinfo.min_speed as f64,
-                    school_name: sunrun_userinfo.school_name.to_owned(),
-                    nick_name: sunrun_userinfo.nick_name.to_owned(),
-                    user_id: sunrun_userinfo.user_id,
-                    latitude: sunrun_userinfo.latitude.to_owned(),
-                    longitude: sunrun_userinfo.longitude.to_owned(),
-                    step: sunrun_userinfo.step,
-                }).await {
-                    Ok(_) => (),
+                match sunrun
+                    .start_run(SunrunUserInfo {
+                        length: sunrun_userinfo.length,
+                        max_speed: sunrun_userinfo.max_speed as f64,
+                        min_speed: sunrun_userinfo.min_speed as f64,
+                        school_name: sunrun_userinfo.school_name.to_owned(),
+                        nick_name: sunrun_userinfo.nick_name.to_owned(),
+                        user_id: sunrun_userinfo.user_id,
+                        latitude: sunrun_userinfo.latitude.to_owned(),
+                        longitude: sunrun_userinfo.longitude.to_owned(),
+                        step: sunrun_userinfo.step,
+                    })
+                    .await
+                {
+                    Ok(_) => {
+                        let _ =
+                            SunrunTasklogManager::create_log(sunrun_userinfo.id, true, "").await;
+                        if let Some(email) = sunrun_userinfo.email.to_owned() {
+                            EmailManager::send_result_email(email, true, None);
+                        }
+                    }
                     Err(e) => {
                         if i >= 3 {
-                            let _ = SunrunTasklogManager::create_log(sunrun_userinfo.id, false, &e.message).await;
+                            let _ = SunrunTasklogManager::create_log(
+                                sunrun_userinfo.id,
+                                false,
+                                &e.message,
+                            )
+                            .await;
                             if let Some(email) = sunrun_userinfo.email.to_owned() {
                                 EmailManager::send_result_email(email, false, Some(e.message));
                             }
+                            break;
                         }
                         tokio::time::sleep(Duration::from_secs(5 * i)).await;
                         continue;
                     }
                 };
                 break;
-            }
-
-            let _ = SunrunTasklogManager::create_log(sunrun_userinfo.id, true, "").await;
-            if let Some(email) = sunrun_userinfo.email.to_owned() {
-                EmailManager::send_result_email(email, true, None);
             }
         })
     }

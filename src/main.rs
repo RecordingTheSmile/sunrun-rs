@@ -1,12 +1,13 @@
-use actix_session::config::{CookieContentSecurity, PersistentSession, TtlExtensionPolicy};
-use actix_session::SessionMiddleware;
 use actix_web::{App, HttpServer};
-use actix_web::cookie::SameSite;
 
 use migration::MigratorTrait;
 use sunrun_rs::controllers::configure::configure;
 use sunrun_rs::services::database::database::Database;
+use sunrun_rs::services::managers::jwt_manager::JwtManager;
+use sunrun_rs::services::managers::timer_task_manager::TimerTaskManager;
 use sunrun_rs::services::scheduler::scheduler::Scheduler;
+use sunrun_rs::wraps::auto_renew_jwt::AutoRenewJwt;
+use sunrun_rs::wraps::session_wrap::SessionWrap;
 
 #[tokio::main]
 async fn main() {
@@ -20,31 +21,43 @@ async fn main() {
         dotenv::from_filename(".env.development").expect("Cannot read .env.development");
     }
     // 初始化日志
-    fast_log::init(fast_log::Config::new().console().level(log::LevelFilter::Warn)).unwrap();
+    fast_log::init(
+        fast_log::Config::new()
+            .console()
+            .level(log::LevelFilter::Warn),
+    )
+    .unwrap();
 
     // 初始化数据库
-    Database::init(std::env::var("DATABASE_URL").unwrap()).await.unwrap();
-    migration::Migrator::up(Database::get_conn(), None).await.unwrap();
+    Database::init(std::env::var("DATABASE_URL").unwrap())
+        .await
+        .unwrap();
+    migration::Migrator::up(Database::get_conn(), None)
+        .await
+        .unwrap();
 
     // 初始化任务
     Scheduler::init().await;
     Scheduler::get().start();
 
+    // 初始化Session
+    JwtManager::init(
+        &std::env::var("SESSION_KEY").expect("无法读取SessionKey，请确认SESSION_KEY是否已正确设置"),
+    );
+
+    // 初始化简单定期任务
+    TimerTaskManager::init().await;
+
     // 初始化并运行HTTP服务器
-    HttpServer::new(move || App::new()
-        .wrap(SessionMiddleware::builder(actix_session::storage::CookieSessionStore::default(), actix_web::cookie::Key::from(std::env::var("SESSION_KEY")
-            .expect("Cannot read SESSION_KEY").as_bytes()))
-            .cookie_name(String::from("SessionID"))
-            .session_lifecycle(PersistentSession::default().session_ttl(actix_web::cookie::time::Duration::days(7))
-                .session_ttl_extension_policy(TtlExtensionPolicy::OnEveryRequest))
-            .cookie_http_only(false)
-            .cookie_same_site(SameSite::Lax)
-            .cookie_content_security(CookieContentSecurity::Private)
-            .build())
-        .configure(configure))
-        .bind(std::env::var("LISTEN_ADDR").expect("Cannot find LISTEN_ADDR"))
-        .unwrap()
-        .run()
-        .await
-        .unwrap()
+    HttpServer::new(move || {
+        App::new()
+            .wrap(AutoRenewJwt)
+            .wrap(SessionWrap)
+            .configure(configure)
+    })
+    .bind(std::env::var("LISTEN_ADDR").expect("Cannot find LISTEN_ADDR"))
+    .unwrap()
+    .run()
+    .await
+    .unwrap()
 }
