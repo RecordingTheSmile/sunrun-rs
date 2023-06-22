@@ -1,1 +1,0 @@
-import{R as s}from"./collapseMotion-09a61311.js";import{r as u,n as o,l as t,as as a,X as f}from"./index-b65b5484.js";function l(){var e=u({}),n=null;return o(function(){n=s.subscribe(function(r){e.value=r})}),t(function(){s.unsubscribe(n)}),e}function v(e){var n=a();return f(function(){n.value=e()},{flush:"sync"}),n}export{v as e,l as u};
