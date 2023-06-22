@@ -83,7 +83,7 @@ where
                                     Ok(v) => {
                                         let headers = response.headers_mut();
                                         headers.insert(
-                                            HeaderName::from_str("X-AUTHORIZATION").unwrap(),
+                                            HeaderName::from_str("x-authorization").unwrap(),
                                             v,
                                         );
                                     }

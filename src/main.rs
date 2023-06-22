@@ -1,3 +1,4 @@
+use actix_web::middleware::DefaultHeaders;
 use actix_web::{App, HttpServer};
 
 use migration::MigratorTrait;
@@ -54,6 +55,7 @@ async fn main() {
     // 初始化并运行HTTP服务器
     HttpServer::new(move || {
         App::new()
+        .wrap(DefaultHeaders::new().add((actix_web::http::header::ACCESS_CONTROL_EXPOSE_HEADERS,"x-authorization")))
             .wrap(AutoRenewJwt)
             .wrap(SessionWrap)
             .configure(configure)
