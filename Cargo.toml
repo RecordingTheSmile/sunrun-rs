@@ -42,6 +42,12 @@ fast_log = "^1"
 scraper="^0"
 jwt-simple = "^0"
 urlencoding = "^2"
+mimalloc = { version = "^0", default-features = false }
 
 entity = {path = "entity"}
 migration = {path = "migration"}
+
+[profile.release]
+lto = "fat"
+codegen-units = 1
+panic = "abort"

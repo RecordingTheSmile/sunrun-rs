@@ -9,6 +9,9 @@ use sunrun_rs::services::scheduler::scheduler::Scheduler;
 use sunrun_rs::wraps::auto_renew_jwt::AutoRenewJwt;
 use sunrun_rs::wraps::session_wrap::SessionWrap;
 
+#[global_allocator]
+static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
+
 #[tokio::main]
 async fn main() {
     // 读取配置文件
